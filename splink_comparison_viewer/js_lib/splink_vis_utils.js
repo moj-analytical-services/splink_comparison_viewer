@@ -8803,6 +8803,9 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	}
 
 	function gamma_table_data(data, ss_object) {
+	  // TODO:  Sort by match weight
+	  data.sort((a, b) => a.match_weight - b.match_weight);
+	  debugger;
 	  let gamma_keys = Object.keys(data[0]);
 
 	  let result_data = [];
