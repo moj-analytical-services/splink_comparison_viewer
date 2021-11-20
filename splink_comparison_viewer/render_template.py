@@ -16,7 +16,7 @@ def render_html_vis(
     # When developing the package, it can be easier to point
     # ar the script live on observable using <script src=>
     # rather than bundling the whole thing into the html
-    bundle_observable_notebook = False
+    bundle_observable_notebook = True
 
     template_path = "jinja/template.j2"
     template = pkgutil.get_data(__name__, template_path).decode("utf-8")

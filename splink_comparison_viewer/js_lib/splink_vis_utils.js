@@ -2833,7 +2833,7 @@
 	      };
 	      script.async = true;
 	      script.src = url;
-	      window.define = define$1;
+	      window.define = define$2;
 	      document.head.appendChild(script);
 	    }));
 	    return module;
@@ -2887,7 +2887,7 @@
 	  return name === "exports" || name === "module";
 	}
 
-	function define$1(name, dependencies, factory) {
+	function define$2(name, dependencies, factory) {
 	  const n = arguments.length;
 	  if (n < 2) factory = name, dependencies = [];
 	  else if (n < 3) factory = dependencies, dependencies = typeof name === "string" ? [] : name;
@@ -2908,7 +2908,7 @@
 	  });
 	}
 
-	define$1.amd = {};
+	define$2.amd = {};
 
 	function dependency(name, version, main) {
 	  return {
@@ -2918,9 +2918,9 @@
 	  };
 	}
 
-	const d3 = dependency("d3", "7.1.0", "dist/d3.min.js");
-	const inputs = dependency("@observablehq/inputs", "0.10.1", "dist/inputs.min.js");
-	const plot = dependency("@observablehq/plot", "0.2.8", "dist/plot.umd.min.js");
+	const d3 = dependency("d3", "7.1.1", "dist/d3.min.js");
+	const inputs = dependency("@observablehq/inputs", "0.10.3", "dist/inputs.min.js");
+	const plot = dependency("@observablehq/plot", "0.2.9", "dist/plot.umd.min.js");
 	const graphviz = dependency("@observablehq/graphviz", "0.2.1", "dist/graphviz.min.js");
 	const highlight = dependency("@observablehq/highlight.js", "2.0.0", "highlight.min.js");
 	const katex = dependency("@observablehq/katex", "0.11.1", "dist/katex.min.js");
@@ -2928,7 +2928,7 @@
 	const htl = dependency("htl", "0.3.1", "dist/htl.min.js");
 	const jszip = dependency("jszip", "3.7.1", "dist/jszip.min.js");
 	const marked = dependency("marked", "0.3.12", "marked.min.js");
-	const sql = dependency("sql.js", "1.6.1", "dist/sql-wasm.js");
+	const sql = dependency("sql.js", "1.6.2", "dist/sql-wasm.js");
 	const vega = dependency("vega", "5.21.0", "build/vega.min.js");
 	const vegalite = dependency("vega-lite", "5.1.1", "build/vega-lite.min.js");
 	const vegaliteApi = dependency("vega-lite-api", "5.0.0", "build/vega-lite-api.min.js");
@@ -2975,7 +2975,13 @@
 	      element$1("tbody", rows.map(r => element$1("tr", columns.map(c => element$1("td", [text$2(r[c])])))))
 	    ]);
 	  }
+	  async sql(strings, ...args) {
+	    return this.query(strings.join("?"), args);
+	  }
 	}
+	Object.defineProperty(SQLiteDatabaseClient.prototype, "dialect", {
+	  value: "sqlite"
+	});
 
 	function load$1(source) {
 	  return typeof source === "string" ? fetch(source).then(load$1)
@@ -3153,13 +3159,14 @@
 	  async tsv(options) {
 	    return dsv(this, "\t", options);
 	  }
-	  async image() {
+	  async image(props) {
 	    const url = await this.url();
 	    return new Promise((resolve, reject) => {
-	      const i = new Image;
+	      const i = new Image();
 	      if (new URL(url, document.baseURI).origin !== new URL(location).origin) {
 	        i.crossOrigin = "anonymous";
 	      }
+	      Object.assign(i, props);
 	      i.onload = () => resolve(i);
 	      i.onerror = () => reject(new Error(`Unable to load file: ${this.name}`));
 	      i.src = url;
@@ -4276,6 +4283,7 @@
 	  Object.defineProperties(this, {
 	    _dirty: {value: new Set},
 	    _updates: {value: new Set},
+	    _precomputes: {value: [], writable: true},
 	    _computing: {value: null, writable: true},
 	    _init: {value: null, writable: true},
 	    _modules: {value: new Map},
@@ -4294,6 +4302,7 @@
 	});
 
 	Object.defineProperties(Runtime.prototype, {
+	  _precompute: {value: runtime_precompute, writable: true, configurable: true},
 	  _compute: {value: runtime_compute, writable: true, configurable: true},
 	  _computeSoon: {value: runtime_computeSoon, writable: true, configurable: true},
 	  _computeNow: {value: runtime_computeNow, writable: true, configurable: true},
@@ -4332,24 +4341,32 @@
 	  return module;
 	}
 
+	function runtime_precompute(callback) {
+	  this._precomputes.push(callback);
+	  this._compute();
+	}
+
 	function runtime_compute() {
 	  return this._computing || (this._computing = this._computeSoon());
 	}
 
 	function runtime_computeSoon() {
-	  var runtime = this;
-	  return new Promise(function(resolve) {
-	    frame(function() {
-	      resolve();
-	      runtime._disposed || runtime._computeNow();
-	    });
-	  });
+	  return new Promise(frame).then(() => this._disposed ? undefined : this._computeNow());
 	}
 
-	function runtime_computeNow() {
+	async function runtime_computeNow() {
 	  var queue = [],
 	      variables,
-	      variable;
+	      variable,
+	      precomputes = this._precomputes;
+
+	  // If there are any paused generators, resume them before computing so they
+	  // can update (if synchronous) before computing downstream variables.
+	  if (precomputes.length) {
+	    this._precomputes = [];
+	    for (const callback of precomputes) callback();
+	    await runtime_defer(3);
+	  }
 
 	  // Compute the reachability of the transitive closure of dirty variables.
 	  // Any newly-reachable variable must also be recomputed.
@@ -4419,6 +4436,16 @@
 	  }
 	}
 
+	// We want to give generators, if they’re defined synchronously, a chance to
+	// update before computing downstream variables. This creates a synchronous
+	// promise chain of the given depth that we’ll await before recomputing
+	// downstream variables.
+	function runtime_defer(depth = 0) {
+	  let p = Promise.resolve();
+	  for (let i = 0; i < depth; ++i) p = p.then(() => {});
+	  return p;
+	}
+
 	function variable_circular(variable) {
 	  const inputs = new Set(variable._inputs);
 	  for (const i of inputs) {
@@ -4466,10 +4493,21 @@
 	  variable._invalidate();
 	  variable._invalidate = noop;
 	  variable._pending();
-	  var value0 = variable._value,
-	      version = ++variable._version,
-	      invalidation = null,
-	      promise = variable._promise = Promise.all(variable._inputs.map(variable_value)).then(function(inputs) {
+
+	  const value0 = variable._value;
+	  const version = ++variable._version;
+
+	  // Lazily-constructed invalidation variable; only constructed if referenced as an input.
+	  let invalidation = null;
+
+	  // If the variable doesn’t have any inputs, we can optimize slightly.
+	  const promise = variable._promise = (variable._inputs.length
+	      ? Promise.all(variable._inputs.map(variable_value)).then(define)
+	      : new Promise(resolve => resolve(variable._definition.call(value0))))
+	    .then(generate);
+
+	  // Compute the initial value of the variable.
+	  function define(inputs) {
 	    if (variable._version !== version) return;
 
 	    // Replace any reference to invalidation with the promise, lazily.
@@ -4487,64 +4525,79 @@
 	      }
 	    }
 
-	    // Compute the initial value of the variable.
 	    return variable._definition.apply(value0, inputs);
-	  }).then(function(value) {
-	    // If the value is a generator, then retrieve its first value,
-	    // and dispose of the generator if the variable is invalidated.
-	    // Note that the cell may already have been invalidated here,
-	    // in which case we need to terminate the generator immediately!
+	  }
+
+	  // If the value is a generator, then retrieve its first value, and dispose of
+	  // the generator if the variable is invalidated. Note that the cell may
+	  // already have been invalidated here, in which case we need to terminate the
+	  // generator immediately!
+	  function generate(value) {
 	    if (generatorish(value)) {
 	      if (variable._version !== version) return void value.return();
 	      (invalidation || variable_invalidator(variable)).then(variable_return(value));
-	      return variable_precompute(variable, version, promise, value);
+	      return variable_generate(variable, version, value);
 	    }
 	    return value;
-	  });
-	  promise.then(function(value) {
+	  }
+
+	  promise.then((value) => {
 	    if (variable._version !== version) return;
 	    variable._value = value;
 	    variable._fulfilled(value);
-	  }, function(error) {
+	  }, (error) => {
 	    if (variable._version !== version) return;
 	    variable._value = undefined;
 	    variable._rejected(error);
 	  });
 	}
 
-	function variable_precompute(variable, version, promise, generator) {
-	  function recompute() {
-	    var promise = new Promise(function(resolve) {
-	      resolve(generator.next());
-	    }).then(function(next) {
-	      return next.done ? undefined : Promise.resolve(next.value).then(function(value) {
-	        if (variable._version !== version) return;
-	        variable_postrecompute(variable, value, promise).then(recompute);
-	        variable._fulfilled(value);
-	        return value;
-	      });
+	function variable_generate(variable, version, generator) {
+	  const runtime = variable._module._runtime;
+
+	  // Retrieve the next value from the generator; if successful, invoke the
+	  // specified callback. The returned promise resolves to the yielded value, or
+	  // to undefined if the generator is done.
+	  function compute(onfulfilled) {
+	    return new Promise(resolve => resolve(generator.next())).then(({done, value}) => {
+	      return done ? undefined : Promise.resolve(value).then(onfulfilled);
 	    });
-	    promise.catch(function(error) {
+	  }
+
+	  // Retrieve the next value from the generator; if successful, fulfill the
+	  // variable, compute downstream variables, and schedule the next value to be
+	  // pulled from the generator at the start of the next animation frame. If not
+	  // successful, reject the variable, compute downstream variables, and return.
+	  function recompute() {
+	    const promise = compute((value) => {
 	      if (variable._version !== version) return;
-	      variable_postrecompute(variable, undefined, promise);
+	      postcompute(value, promise).then(() => runtime._precompute(recompute));
+	      variable._fulfilled(value);
+	      return value;
+	    });
+	    promise.catch((error) => {
+	      if (variable._version !== version) return;
+	      postcompute(undefined, promise);
 	      variable._rejected(error);
 	    });
 	  }
-	  return new Promise(function(resolve) {
-	    resolve(generator.next());
-	  }).then(function(next) {
-	    if (next.done) return;
-	    promise.then(recompute);
-	    return next.value;
-	  });
-	}
 
-	function variable_postrecompute(variable, value, promise) {
-	  var runtime = variable._module._runtime;
-	  variable._value = value;
-	  variable._promise = promise;
-	  variable._outputs.forEach(runtime._updates.add, runtime._updates); // TODO Cleaner?
-	  return runtime._compute();
+	  // After the generator fulfills or rejects, set its current value, promise,
+	  // and schedule any downstream variables for update.
+	  function postcompute(value, promise) {
+	    variable._value = value;
+	    variable._promise = promise;
+	    variable._outputs.forEach(runtime._updates.add, runtime._updates);
+	    return runtime._compute();
+	  }
+
+	  // When retrieving the first value from the generator, the promise graph is
+	  // already established, so we only need to queue the next pull.
+	  return compute((value) => {
+	    if (variable._version !== version) return;
+	    runtime._precompute(recompute);
+	    return value;
+	  });
 	}
 
 	function variable_error(variable, error) {
@@ -6071,7 +6124,7 @@
 	}
 
 	// https://observablehq.com/@robinl/to-embed-in-splink-outputs@1734
-	function define(runtime, observer) {
+	function define$1(runtime, observer) {
 	  const main = runtime.module();
 	  main.variable(observer()).define(["md"], function(md){return(
 	md`# To embed in splink outputs`
@@ -6508,6 +6561,177 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	  return main;
 	}
 
+	function define(runtime, observer) {
+	  const main = runtime.module();
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`# splink_comparison_viewer`
+	)});
+	  main.variable(observer("viewof show_edge_comparison_type")).define("viewof show_edge_comparison_type", ["splink_vis_utils"], function(splink_vis_utils){return(
+	splink_vis_utils.checkbox(
+	  new Map([
+	    ["Show simple comparison table", "show_simple_comparison_table"],
+	    [
+	      "Show case statement comparison table",
+	      "show_case_statement_comparison_table"
+	    ]
+	  ]),
+	  {
+	    label: "",
+	    value: ["show_simple_comparison_table"]
+	  }
+	)
+	)});
+	  main.variable(observer("show_edge_comparison_type")).define("show_edge_comparison_type", ["Generators", "viewof show_edge_comparison_type"], (G, _) => G.input(_));
+	  main.variable(observer("viewof comparison_vector_distribution_chart")).define("viewof comparison_vector_distribution_chart", ["vegaEmbed","chart_spec_with_data"], function(vegaEmbed,chart_spec_with_data){return(
+	vegaEmbed(chart_spec_with_data)
+	)});
+	  main.variable(observer("comparison_vector_distribution_chart")).define("comparison_vector_distribution_chart", ["Generators", "viewof comparison_vector_distribution_chart"], (G, _) => G.input(_));
+	  main.variable(observer("viewof refresh")).define("viewof refresh", ["Inputs"], function(Inputs){return(
+	Inputs.button("refresh splink_vis_utils javascript lib")
+	)});
+	  main.variable(observer("refresh")).define("refresh", ["Generators", "viewof refresh"], (G, _) => G.input(_));
+	  main.variable(observer("nothing_selected_message")).define("nothing_selected_message", ["no_edge_selected","html"], function(no_edge_selected,html)
+	{
+	  if (no_edge_selected) {
+	    return html`<span style="color:red; font-weight:bold; background-color: #FFFF00"'>Click on a bar in the comparison vector chart above to show an example record comparison`;
+	  }
+
+	  return html``;
+	}
+	);
+	  main.variable(observer("compairson_non_null_table")).define("compairson_non_null_table", ["no_edge_selected","html","show_edge_comparison_type","splink_vis_utils","selected_edge","ss"], function(no_edge_selected,html,show_edge_comparison_type,splink_vis_utils,selected_edge,ss)
+	{
+	  if (no_edge_selected) {
+	    return html``;
+	  }
+	  if (show_edge_comparison_type.includes("show_simple_comparison_table")) {
+	    return html`  <h3>Comparison of non-null fields</h3>   
+    ${splink_vis_utils.edge_row_to_table(selected_edge, ss)}
+`;
+	  }
+
+	  return html``;
+	}
+	);
+	  main.variable(observer("comparison_columns_table")).define("comparison_columns_table", ["no_edge_selected","html","show_edge_comparison_type","splink_vis_utils","selected_edge","ss"], function(no_edge_selected,html,show_edge_comparison_type,splink_vis_utils,selected_edge,ss)
+	{
+	  if (no_edge_selected) {
+	    return html``;
+	  }
+	  if (
+	    show_edge_comparison_type.includes("show_case_statement_comparison_table")
+	  ) {
+	    return html`
+  <h3>Record comparison and associated case expression</h3>   
+${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
+	  }
+
+	  return html``;
+	}
+	);
+	  main.variable(observer("waterfall_chart")).define("waterfall_chart", ["no_edge_selected","html","splink_vis_utils","selected_edge","ss","vegaEmbed"], function(no_edge_selected,html,splink_vis_utils,selected_edge,ss,vegaEmbed)
+	{
+	  if (no_edge_selected) {
+	    return html``;
+	  } else {
+	    let waterfall_data = splink_vis_utils.get_waterfall_chart_data(
+	      selected_edge,
+	      ss
+	    );
+
+	    return vegaEmbed(
+	      splink_vis_utils.get_waterfall_chart_spec(waterfall_data, { height: 250 })
+	    );
+	  }
+	}
+	);
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`## Interations`
+	)});
+	  main.variable(observer("cv_chart_selection")).define("cv_chart_selection", ["observe_chart_data","comparison_vector_distribution_chart"], function(observe_chart_data,comparison_vector_distribution_chart){return(
+	observe_chart_data(
+	  comparison_vector_distribution_chart,
+	  "gam_concat_signal"
+	)
+	)});
+	  main.variable(observer("selected_edge")).define("selected_edge", ["cv_chart_selection","comparison_vector_row_lookup"], function(cv_chart_selection,comparison_vector_row_lookup)
+	{
+	  if ("gam_concat" in cv_chart_selection) {
+	    return comparison_vector_row_lookup[cv_chart_selection["gam_concat"][0]];
+	  } else {
+	    return undefined;
+	  }
+	}
+	);
+	  main.variable(observer("no_edge_selected")).define("no_edge_selected", ["cv_chart_selection"], function(cv_chart_selection){return(
+	!("gam_concat" in cv_chart_selection)
+	)});
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`## Other`
+	)});
+	  main.variable(observer("new_width")).define("new_width", ["width"], function(width)
+	{
+	  if (width - 200 > 1200) {
+	    return 1000;
+	  }
+	  return width - 200;
+	}
+	);
+	  main.variable(observer("ss")).define("ss", ["splink_vis_utils","splink_settings"], function(splink_vis_utils,splink_settings){return(
+	new splink_vis_utils.SplinkSettings(JSON.stringify(splink_settings))
+	)});
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`## Functions`
+	)});
+	  main.variable(observer("create_comparison_vector_row_lookup")).define("create_comparison_vector_row_lookup", function(){return(
+	function create_comparison_vector_row_lookup(sample_edges) {
+	  let lookup = {};
+	  sample_edges.forEach(d => {
+	    let gc = d["gam_concat"];
+	    lookup[gc] = d;
+	  });
+	  return lookup;
+	}
+	)});
+	  main.variable(observer("comparison_vector_row_lookup")).define("comparison_vector_row_lookup", ["create_comparison_vector_row_lookup","comparison_vector_data"], function(create_comparison_vector_row_lookup,comparison_vector_data){return(
+	create_comparison_vector_row_lookup(
+	  comparison_vector_data
+	)
+	)});
+	  main.variable(observer("observe_chart_data")).define("observe_chart_data", ["Generators"], function(Generators){return(
+	function observe_chart_data(chart, signal_name) {
+	  return Generators.observe(function(notify) {
+	    const signaled = (name, value) => notify(chart.signal(signal_name));
+	    chart.addSignalListener(signal_name, signaled);
+	    notify(chart.signal(signal_name));
+
+	    return () => chart.removeSignalListener(signal_name, signaled);
+	  });
+	}
+	)});
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`## External libs`
+	)});
+	  main.variable(observer("chart_spec_with_data")).define("chart_spec_with_data", ["splink_vis_utils","comparison_vector_data","ss","new_width"], function(splink_vis_utils,comparison_vector_data,ss,new_width)
+	{
+	  let cs_with_data = splink_vis_utils.get_gamma_distribution_chart(
+	    comparison_vector_data,
+	    ss,
+	    new_width
+	  );
+
+	  return cs_with_data;
+	}
+	);
+	  main.variable(observer()).define(["md"], function(md){return(
+	md`## Data`
+	)});
+	  main.variable(observer("localUrl")).define("localUrl", function(){return(
+	"http://127.0.0.1:8080/dist/splink_vis_utils.js"
+	)});
+	  return main;
+	}
+
 	const log2 = Math.log2;
 
 	function bayes_factor_to_prob(b) {
@@ -6661,7 +6885,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	  return rows_except_final.concat([final_row]);
 	}
 
-	var $schema$1 = "https://vega.github.io/schema/vega/v5.json";
+	var $schema$2 = "https://vega.github.io/schema/vega/v5.json";
 	var description = "Links and nodes";
 	var padding = 0;
 	var autosize = "none";
@@ -6830,7 +7054,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	var height$1 = {
 		signal: "vis_height"
 	};
-	var data$1 = [
+	var data$2 = [
 		{
 			name: "node-data",
 			values: null
@@ -7018,15 +7242,15 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 			}
 		}
 	];
-	var base_spec$1 = {
-		$schema: $schema$1,
+	var base_spec$2 = {
+		$schema: $schema$2,
 		description: description,
 		padding: padding,
 		autosize: autosize,
 		signals: signals,
 		width: width$1,
 		height: height$1,
-		data: data$1,
+		data: data$2,
 		scales: scales,
 		legends: legends,
 		marks: marks
@@ -7056,7 +7280,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 
 	class ForceDirectedChart {
 	  constructor(nodes_data, links_data) {
-	    let base_spec_cp = cloneDeep(base_spec$1);
+	    let base_spec_cp = cloneDeep(base_spec$2);
 	    this.spec = base_spec_cp;
 	    this.set_force_directed_node_data(nodes_data);
 	    this.set_force_directed_edge_data(links_data);
@@ -7588,7 +7812,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    .filter((d) => d[`${cluster_field}_r`] == selected_cluster_id);
 	}
 
-	var config = {
+	var config$1 = {
 		view: {
 			continuousWidth: 400,
 			continuousHeight: 300
@@ -7935,38 +8159,38 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	var width = {
 		step: 75
 	};
-	var $schema = "https://vega.github.io/schema/vega-lite/v4.8.1.json";
-	var data = {
+	var $schema$1 = "https://vega.github.io/schema/vega-lite/v4.8.1.json";
+	var data$1 = {
 		values: null
 	};
 	var waterfall = {
-		config: config,
+		config: config$1,
 		title: title,
 		transform: transform,
 		layer: layer,
 		height: height,
 		resolve: resolve,
 		width: width,
-		$schema: $schema,
-		data: data
+		$schema: $schema$1,
+		data: data$1
 	};
 
-	var base_spec = /*#__PURE__*/Object.freeze({
+	var base_spec$1 = /*#__PURE__*/Object.freeze({
 		__proto__: null,
-		config: config,
+		config: config$1,
 		title: title,
 		transform: transform,
 		layer: layer,
 		height: height,
 		resolve: resolve,
 		width: width,
-		$schema: $schema,
-		data: data,
+		$schema: $schema$1,
+		data: data$1,
 		'default': waterfall
 	});
 
 	function get_waterfall_chart_spec(data, overrides, simplified = false) {
-	  let base_spec_2 = cloneDeep(base_spec);
+	  let base_spec_2 = cloneDeep(base_spec$1);
 
 	  base_spec_2.data.values = data;
 	  let spec = { ...base_spec_2, ...overrides };
@@ -8240,6 +8464,369 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	  return table(new_data, { layout: "auto" });
 	}
 
+	var $schema = "https://vega.github.io/schema/vega-lite/v5.json";
+	var config = {
+		view: {
+			continuousHeight: 300,
+			continuousWidth: 400
+		}
+	};
+	var data = {
+		values: [
+		]
+	};
+	var vconcat = [
+		{
+			encoding: {
+				color: {
+					field: "match_probability",
+					legend: {
+						title: ""
+					},
+					scale: {
+						domain: [
+							0,
+							0.5,
+							1
+						],
+						range: [
+							"red",
+							"orange",
+							"green"
+						]
+					},
+					type: "quantitative"
+				},
+				tooltip: [
+					{
+						field: "gam_concat",
+						type: "nominal"
+					},
+					{
+						field: "count",
+						type: "quantitative"
+					},
+					{
+						field: "match_probability",
+						type: "quantitative",
+						format: ",.1%"
+					},
+					{
+						field: "match_weight",
+						type: "quantitative",
+						format: ",.2f"
+					},
+					{
+						field: "proportion_of_comparisons",
+						type: "quantitative",
+						format: ",.1%"
+					},
+					{
+						field: "cumulative_comparisons",
+						type: "quantitative",
+						format: ",.1%"
+					}
+				],
+				x: {
+					field: "gam_concat",
+					sort: {
+						field: "match_weight",
+						op: "sum",
+						order: "ascending"
+					},
+					title: "",
+					type: "nominal",
+					axis: {
+						labels: false,
+						ticks: 0,
+						grid: false
+					}
+				},
+				y: {
+					field: "count",
+					scale: {
+						constant: 40,
+						type: "symlog"
+					},
+					title: "Frequency count of comparison vector",
+					type: "quantitative"
+				}
+			},
+			mark: {
+				type: "bar",
+				clip: true
+			},
+			title: {
+				subtitle: "Click bars on upmost chart to display example. Brush bottom chart to zoom. ",
+				text: "Count of comparison vector values"
+			},
+			width: 1000,
+			transform: [
+				{
+					filter: {
+						param: "brush"
+					}
+				}
+			],
+			selection: {
+				gam_concat_signal: {
+					type: "single",
+					encodings: [
+						"x"
+					]
+				}
+			}
+		},
+		{
+			layer: [
+				{
+					data: {
+						values: [
+						]
+					},
+					mark: "rect",
+					width: 1000,
+					height: {
+						step: 10
+					},
+					transform: [
+						{
+							filter: {
+								param: "brush"
+							}
+						}
+					],
+					encoding: {
+						y: {
+							field: "gam_name",
+							type: "nominal",
+							title: ""
+						},
+						x: {
+							field: "gam_concat",
+							type: "ordinal",
+							sort: {
+								field: "gamma_concat_id",
+								op: "sum",
+								order: "ascending"
+							},
+							axis: {
+								labels: false,
+								ticks: 0,
+								grid: false
+							},
+							title: ""
+						},
+						color: {
+							field: "gam_value_norm",
+							legend: {
+								title: ""
+							},
+							type: "quantitative",
+							scale: {
+								domain: [
+									0,
+									0.5,
+									1
+								],
+								range: [
+									"red",
+									"orange",
+									"green"
+								]
+							}
+						},
+						tooltip: [
+							{
+								field: "gam_name",
+								type: "nominal"
+							},
+							{
+								field: "gam_value",
+								type: "quantitative"
+							}
+						]
+					}
+				},
+				{
+					data: {
+						values: [
+						]
+					},
+					mark: {
+						type: "text",
+						fontSize: 8
+					},
+					width: 1000,
+					height: {
+						step: 10
+					},
+					transform: [
+						{
+							filter: {
+								param: "brush"
+							}
+						}
+					],
+					encoding: {
+						y: {
+							field: "gam_name",
+							type: "nominal",
+							title: ""
+						},
+						x: {
+							field: "gam_concat",
+							type: "ordinal",
+							sort: {
+								field: "gamma_concat_id",
+								op: "sum",
+								order: "ascending"
+							},
+							axis: {
+								labels: false,
+								ticks: 0,
+								grid: false
+							},
+							title: ""
+						},
+						text: {
+							field: "gam_value"
+						}
+					}
+				}
+			]
+		},
+		{
+			encoding: {
+				color: {
+					field: "match_probability",
+					legend: {
+						title: ""
+					},
+					scale: {
+						domain: [
+							0,
+							0.5,
+							1
+						],
+						range: [
+							"red",
+							"orange",
+							"green"
+						]
+					},
+					type: "quantitative"
+				},
+				x: {
+					field: "gam_concat",
+					sort: {
+						field: "match_weight",
+						op: "sum",
+						order: "ascending"
+					},
+					title: "Comparison vector value.  (Brush bottom chart to zoom. Click to reset.)",
+					type: "nominal",
+					axis: {
+						labels: false,
+						ticks: 0,
+						grid: false
+					}
+				},
+				y: {
+					field: "count",
+					scale: {
+						constant: 1,
+						type: "symlog"
+					},
+					title: "",
+					type: "quantitative",
+					axis: {
+						tickCount: 0,
+						grid: false
+					}
+				}
+			},
+			mark: {
+				type: "bar",
+				clip: true
+			},
+			title: {
+				text: ""
+			},
+			width: 1000,
+			height: 40,
+			params: [
+				{
+					name: "brush",
+					select: {
+						type: "interval",
+						encodings: [
+							"x"
+						]
+					}
+				}
+			]
+		}
+	];
+	var gamma_distribution = {
+		$schema: $schema,
+		config: config,
+		data: data,
+		vconcat: vconcat
+	};
+
+	var base_spec = /*#__PURE__*/Object.freeze({
+		__proto__: null,
+		$schema: $schema,
+		config: config,
+		data: data,
+		vconcat: vconcat,
+		'default': gamma_distribution
+	});
+
+	function get_gamma_distribution_chart(data, ss_object, width) {
+	  let base_spec_2 = cloneDeep(base_spec);
+
+	  let gamma_data = gamma_table_data(data, ss_object);
+
+	  base_spec_2.data.values = data;
+	  base_spec_2.vconcat[1]["layer"][0].data.values = gamma_data;
+	  base_spec_2.vconcat[1]["layer"][1].data.values = gamma_data;
+	  base_spec_2.vconcat[1]["layer"][0].width = width;
+	  base_spec_2.vconcat[1]["layer"][1].width = width;
+
+	  base_spec_2.vconcat[0].width = width;
+
+	  base_spec_2.vconcat[2].width = width;
+
+	  return base_spec_2;
+	}
+
+	function gamma_table_data(data, ss_object) {
+	  let gamma_keys = Object.keys(data[0]);
+
+	  let result_data = [];
+	  gamma_keys = gamma_keys.filter((d) => d.startsWith("gamma_"));
+	  let counter = 0;
+	  data.forEach((d) => {
+	    counter += 1;
+	    gamma_keys.forEach((k) => {
+	      let settings_col = ss_object.get_col_by_name(k.replace("gamma_", ""));
+	      let num_levels = settings_col["original_dict"]["num_levels"];
+
+	      let row = {};
+	      row["gam_name"] = k;
+	      row["gam_value"] = d[k];
+	      row["gam_value_norm"] = d[k] == -1 ? null : d[k] / (num_levels - 1);
+
+	      row["gam_concat"] = d["gam_concat"];
+	      row["gam_concat_id"] = counter;
+	      result_data.push(row);
+	    });
+	  });
+	  return result_data;
+	}
+
 	exports.ComparisonColumn = ComparisonColumn;
 	exports.ForceDirectedChart = ForceDirectedChart;
 	exports.Inspector = Inspector;
@@ -8249,7 +8836,8 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	exports.checkbox = checkbox;
 	exports.cloneDeep = cloneDeep;
 	exports.comparison_column_table = comparison_column_table;
-	exports.define = define;
+	exports.define_cluster = define$1;
+	exports.define_comparison = define;
 	exports.detect_edge_colour_metrics = detect_edge_colour_metrics;
 	exports.detect_node_colour_metrics = detect_node_colour_metrics;
 	exports.detect_node_size_metrics = detect_node_size_metrics;
@@ -8258,6 +8846,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	exports.filter_nodes_with_cluster_id = filter_nodes_with_cluster_id;
 	exports.format_edges_data_for_force_directed = format_edges_data_for_force_directed;
 	exports.format_nodes_data_for_force_directed = format_nodes_data_for_force_directed;
+	exports.get_gamma_distribution_chart = get_gamma_distribution_chart;
 	exports.get_unique_cluster_ids_from_nodes_data = get_unique_cluster_ids_from_nodes_data;
 	exports.get_waterfall_chart_data = get_waterfall_chart_data;
 	exports.get_waterfall_chart_spec = get_waterfall_chart_spec;
