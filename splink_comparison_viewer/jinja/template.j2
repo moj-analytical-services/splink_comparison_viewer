@@ -38,7 +38,11 @@
 
     <div id="controls">
 
-    <div id="observablehq-show_edge_comparison_type"></div>
+        <div id="observablehq-show_edge_comparison_type"></div>
+        <div id="observablehq-sort_bars_option"></div>
+        <div id="observablehq-gamma_filters"></div>
+        <div id="observablehq-filter_count"></div>
+
     </div>
     <div id="observablehq-comparison_vector_distribution_chart"></div>
 
@@ -56,13 +60,18 @@ new splink_vis_utils.Runtime().module(splink_vis_utils.define_comparison, name =
 
 {% else %}
 
-import define from "https://api.observablehq.com/d/c43e4e0aeb54d263@339.js?v=3";
+import define from "https://api.observablehq.com/d/c43e4e0aeb54d263.js?v=3";
 new splink_vis_utils.Runtime().module(define, name => {
 
 {% endif %}
 
 if (name === "viewof show_edge_comparison_type") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-show_edge_comparison_type"));
 if (name === "viewof comparison_vector_distribution_chart") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-comparison_vector_distribution_chart"));
+
+
+if (name === "viewof sort_bars_option") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-sort_bars_option"));
+if (name === "viewof gamma_filters") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-gamma_filters"));
+if (name === "viewof filter_count") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-filter_count"));
 
 
 if (name === "nothing_selected_message") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-nothing_selected_message"));

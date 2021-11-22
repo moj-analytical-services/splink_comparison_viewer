@@ -6582,14 +6582,35 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	)
 	)});
 	  main.variable(observer("show_edge_comparison_type")).define("show_edge_comparison_type", ["Generators", "viewof show_edge_comparison_type"], (G, _) => G.input(_));
+	  main.variable(observer("viewof sort_bars_option")).define("viewof sort_bars_option", ["splink_vis_utils"], function(splink_vis_utils)
+	{
+	  let select_options = new Map([
+	    ["Sort historam by match weight", "sort_match_weight"],
+	    ["Sort histogram by sum of matches in bar", "sort_sum_matches"]
+	  ]);
+	  return splink_vis_utils.select(select_options, {
+	    label: "Sort histogram bars by: ",
+	    value: "sort_match_weight"
+	  });
+	}
+	);
+	  main.variable(observer("sort_bars_option")).define("sort_bars_option", ["Generators", "viewof sort_bars_option"], (G, _) => G.input(_));
+	  main.variable(observer("viewof gamma_filters")).define("viewof gamma_filters", ["get_gammas_filters","ss"], function(get_gammas_filters,ss){return(
+	get_gammas_filters(ss)
+	)});
+	  main.variable(observer("gamma_filters")).define("gamma_filters", ["Generators", "viewof gamma_filters"], (G, _) => G.input(_));
+	  main.variable(observer("viewof filter_count")).define("viewof filter_count", ["Inputs"], function(Inputs){return(
+	Inputs.range([1, 1000], {
+	  label: "Filter out comparison vector counts below",
+	  step: 1,
+	  value: 1
+	})
+	)});
+	  main.variable(observer("filter_count")).define("filter_count", ["Generators", "viewof filter_count"], (G, _) => G.input(_));
 	  main.variable(observer("viewof comparison_vector_distribution_chart")).define("viewof comparison_vector_distribution_chart", ["vegaEmbed","chart_spec_with_data"], function(vegaEmbed,chart_spec_with_data){return(
 	vegaEmbed(chart_spec_with_data)
 	)});
 	  main.variable(observer("comparison_vector_distribution_chart")).define("comparison_vector_distribution_chart", ["Generators", "viewof comparison_vector_distribution_chart"], (G, _) => G.input(_));
-	  main.variable(observer("viewof refresh")).define("viewof refresh", ["Inputs"], function(Inputs){return(
-	Inputs.button("refresh splink_vis_utils javascript lib")
-	)});
-	  main.variable(observer("refresh")).define("refresh", ["Generators", "viewof refresh"], (G, _) => G.input(_));
 	  main.variable(observer("nothing_selected_message")).define("nothing_selected_message", ["no_edge_selected","html"], function(no_edge_selected,html)
 	{
 	  if (no_edge_selected) {
@@ -6645,6 +6666,39 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  }
 	}
 	);
+	  main.variable(observer("viewof refresh")).define("viewof refresh", ["Inputs"], function(Inputs){return(
+	Inputs.button("refresh splink_vis_utils javascript lib")
+	)});
+	  main.variable(observer("refresh")).define("refresh", ["Generators", "viewof refresh"], (G, _) => G.input(_));
+	  main.variable(observer("get_gammas_filters")).define("get_gammas_filters", ["html","Inputs"], function(html,Inputs){return(
+	function get_gammas_filters(splink_settings_object) {
+	  let ss_cols = splink_settings_object.comparison_columns;
+
+	  const form = html`<form>
+    ${ss_cols.map(cc => {
+      let num_levels = cc.original_dict.num_levels;
+      let select_values = [...Array(num_levels).keys()];
+      select_values.unshift(-1);
+      select_values.unshift("Any");
+
+      return html`<div id='id_${cc.name}'>${Inputs.select(select_values, {
+        label: `Filter ${cc.name}`
+      })}</div>`;
+    })}
+
+</form>`;
+
+	  form.oninput = function() {
+	    let mydict = {};
+	    ss_cols.forEach(cc => {
+	      mydict[cc.name] = form.querySelector(`#id_${cc.name} form`).value;
+	    });
+	    form.value = mydict;
+	  };
+	  form.oninput();
+	  return form;
+	}
+	)});
 	  main.variable(observer()).define(["md"], function(md){return(
 	md`## Interations`
 	)});
@@ -6680,6 +6734,26 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  main.variable(observer("ss")).define("ss", ["splink_vis_utils","splink_settings"], function(splink_vis_utils,splink_settings){return(
 	new splink_vis_utils.SplinkSettings(JSON.stringify(splink_settings))
 	)});
+	  main.variable(observer("filtered_comparison_vector_data")).define("filtered_comparison_vector_data", ["gamma_filters","comparison_vector_data","filter_count"], function(gamma_filters,comparison_vector_data,filter_count)
+	{
+	  let gam_keys = Object.keys(gamma_filters);
+
+	  let cvd_filtered = comparison_vector_data;
+	  gam_keys.forEach(gk => {
+	    cvd_filtered = cvd_filtered.filter(d => {
+	      let this_filter = gamma_filters[gk];
+	      if (this_filter == "Any") {
+	        return true;
+	      }
+
+	      return d[`gamma_${gk}`] == this_filter;
+	    });
+	  });
+
+	  cvd_filtered = cvd_filtered.filter(d => d.count > filter_count);
+	  return cvd_filtered;
+	}
+	);
 	  main.variable(observer()).define(["md"], function(md){return(
 	md`## Functions`
 	)});
@@ -6712,12 +6786,13 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  main.variable(observer()).define(["md"], function(md){return(
 	md`## External libs`
 	)});
-	  main.variable(observer("chart_spec_with_data")).define("chart_spec_with_data", ["splink_vis_utils","comparison_vector_data","ss","new_width"], function(splink_vis_utils,comparison_vector_data,ss,new_width)
+	  main.variable(observer("chart_spec_with_data")).define("chart_spec_with_data", ["splink_vis_utils","filtered_comparison_vector_data","ss","new_width","sort_bars_option"], function(splink_vis_utils,filtered_comparison_vector_data,ss,new_width,sort_bars_option)
 	{
 	  let cs_with_data = splink_vis_utils.get_gamma_distribution_chart(
-	    comparison_vector_data,
+	    filtered_comparison_vector_data,
 	    ss,
-	    new_width
+	    new_width,
+	    sort_bars_option
 	  );
 
 	  return cs_with_data;
@@ -8517,6 +8592,11 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 						format: ",.2f"
 					},
 					{
+						field: "sum_matches",
+						type: "quantitative",
+						format: ",.1f"
+					},
+					{
 						field: "proportion_of_comparisons",
 						type: "quantitative",
 						format: ",.1%"
@@ -8600,7 +8680,12 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 						y: {
 							field: "gam_name",
 							type: "nominal",
-							title: ""
+							title: "",
+							sort: {
+								field: "gam_key_count",
+								op: "sum",
+								order: "ascending"
+							}
 						},
 						x: {
 							field: "gam_concat",
@@ -8672,7 +8757,12 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 						y: {
 							field: "gam_name",
 							type: "nominal",
-							title: ""
+							title: "",
+							sort: {
+								field: "gam_key_count",
+								op: "sum",
+								order: "ascending"
+							}
 						},
 						x: {
 							field: "gam_concat",
@@ -8784,35 +8874,65 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 		'default': gamma_distribution
 	});
 
-	function get_gamma_distribution_chart(data, ss_object, width) {
+	function sort_match_weight(a, b) {
+	  return a.match_weight - b.match_weight;
+	}
+
+	function sort_sum_matches(a, b) {
+	  return a.sum_matches - b.sum_matches;
+	}
+
+	function get_gamma_distribution_chart(
+	  data,
+	  ss_object,
+	  width,
+	  sort_bars = "sort_match_weight"
+	) {
 	  let base_spec_2 = cloneDeep(base_spec);
+	  let sort_field;
+	  if (sort_bars == "sort_match_weight") {
+	    data.sort(sort_match_weight);
+	    sort_field = "match_weight";
+	  }
+	  if (sort_bars == "sort_sum_matches") {
+	    data.forEach((d) => {
+	      d.sum_matches = d.match_probability * d.count;
+	    });
+	    data.sort(sort_sum_matches);
+	    sort_field = "sum_matches";
+	  }
 
 	  let gamma_data = gamma_table_data(data, ss_object);
 
 	  base_spec_2.data.values = data;
 	  base_spec_2.vconcat[1]["layer"][0].data.values = gamma_data;
 	  base_spec_2.vconcat[1]["layer"][1].data.values = gamma_data;
-	  base_spec_2.vconcat[1]["layer"][0].width = width;
-	  base_spec_2.vconcat[1]["layer"][1].width = width;
 
 	  base_spec_2.vconcat[0].width = width;
-
+	  base_spec_2.vconcat[1]["layer"][0].width = width;
+	  base_spec_2.vconcat[1]["layer"][1].width = width;
 	  base_spec_2.vconcat[2].width = width;
+
+	  base_spec_2.vconcat[0]["encoding"]["x"]["sort"]["field"] = sort_field;
+	  base_spec_2.vconcat[1]["layer"][0]["encoding"]["x"]["sort"]["field"] =
+	    sort_field;
+	  base_spec_2.vconcat[1]["layer"][1]["encoding"]["x"]["sort"]["field"] =
+	    sort_field;
+	  base_spec_2.vconcat[2]["encoding"]["x"]["sort"]["field"] = sort_field;
 
 	  return base_spec_2;
 	}
 
 	function gamma_table_data(data, ss_object) {
-	  // TODO:  Sort by match weight
-	  data.sort((a, b) => a.match_weight - b.match_weight);
-	  debugger;
 	  let gamma_keys = Object.keys(data[0]);
 
 	  let result_data = [];
 	  gamma_keys = gamma_keys.filter((d) => d.startsWith("gamma_"));
+
 	  let counter = 0;
 	  data.forEach((d) => {
 	    counter += 1;
+	    let gam_key_counter = 0;
 	    gamma_keys.forEach((k) => {
 	      let settings_col = ss_object.get_col_by_name(k.replace("gamma_", ""));
 	      let num_levels = settings_col["original_dict"]["num_levels"];
@@ -8824,7 +8944,9 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 
 	      row["gam_concat"] = d["gam_concat"];
 	      row["gam_concat_id"] = counter;
+	      row["gam_key_count"] = gam_key_counter;
 	      result_data.push(row);
+	      gam_key_counter += 1;
 	    });
 	  });
 	  return result_data;
