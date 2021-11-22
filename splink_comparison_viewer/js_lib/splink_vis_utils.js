@@ -7839,13 +7839,17 @@
       );
     main
       .variable(observer("viewof filter_count"))
-      .define("viewof filter_count", ["Inputs"], function (Inputs) {
-        return Inputs.range([1, 1000], {
-          label: "Filter out comparison vector counts below",
-          step: 1,
-          value: 1,
-        });
-      });
+      .define(
+        "viewof filter_count",
+        ["splink_vis_utils"],
+        function (splink_vis_utils) {
+          return splink_vis_utils.range([1, 1000], {
+            label: "Filter out comparison vector counts below",
+            step: 1,
+            value: 1,
+          });
+        }
+      );
     main
       .variable(observer("filter_count"))
       .define("filter_count", ["Generators", "viewof filter_count"], (G, _) =>
@@ -8004,8 +8008,8 @@
       .variable(observer("get_gammas_filters"))
       .define(
         "get_gammas_filters",
-        ["html", "Inputs"],
-        function (html, Inputs) {
+        ["html", "splink_vis_utils"],
+        function (html, splink_vis_utils) {
           return function get_gammas_filters(splink_settings_object) {
             let ss_cols = splink_settings_object.comparison_columns;
 
@@ -8017,7 +8021,7 @@
                 select_values.unshift("Any");
 
                 return html`<div id="id_${cc.name}">
-                  ${Inputs.select(select_values, {
+                  ${splink_vis_utils.select(select_values, {
                     label: `Filter ${cc.name}`,
                   })}
                 </div>`;
@@ -8198,9 +8202,6 @@
     main.variable(observer()).define(["md"], function (md) {
       return md`
 ## Data`;
-    });
-    main.variable(observer("localUrl")).define("localUrl", function () {
-      return "http://127.0.0.1:8080/dist/splink_vis_utils.js";
     });
     return main;
   }
