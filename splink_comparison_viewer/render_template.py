@@ -2,8 +2,6 @@ from jinja2 import Template
 import json
 import os
 import pkgutil
-import pandas as pd
-from splink.settings import Settings
 
 
 def render_html_vis(
