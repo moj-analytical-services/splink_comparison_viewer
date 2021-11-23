@@ -1,1 +1,22 @@
 # splink_comparison_viewer
+
+Not very well documented yet!
+
+But to use you do:
+
+```
+
+from splink import Splink
+linker = Splink(settings_obj.settings_dict, df, spark)
+df_e = linker.get_scored_comparisons()
+
+
+from splink_comparison_viewer import get_vis_data, render_html_vis
+edges_data = get_vis_data(df_e, linker.model.current_settings_obj.settings_dict, 3)
+render_html_vis(edges_data, linker.model.current_settings_obj.settings_dict, "out.html", True)
+
+```
+
+For big `df_e`, probably good to save it out to disk before passing to `get_vis_data()`
+
+For very big `df_e` with a large number of distinct comparison vector patterns (>20k), might want to filter down `edges_data` before passing to `render_html_vis` e.g. to remove entries with low counts.
