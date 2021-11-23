@@ -47,6 +47,7 @@
     <div id="observablehq-comparison_vector_distribution_chart"></div>
 
     <div id="observablehq-nothing_selected_message"></div>
+    <div id="observablehq-example_index"></div>
     <div id="observablehq-compairson_non_null_table"></div>
     <div id="observablehq-comparison_columns_table"></div>
     <div id="observablehq-waterfall_chart"></div>
@@ -72,6 +73,8 @@ if (name === "viewof comparison_vector_distribution_chart") return new splink_vi
 if (name === "viewof sort_bars_option") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-sort_bars_option"));
 if (name === "viewof gamma_filters") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-gamma_filters"));
 if (name === "viewof filter_count") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-filter_count"));
+
+if (name === "viewof example_index") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-example_index"));
 
 
 if (name === "nothing_selected_message") return new splink_vis_utils.Inspector(document.querySelector("#observablehq-nothing_selected_message"));

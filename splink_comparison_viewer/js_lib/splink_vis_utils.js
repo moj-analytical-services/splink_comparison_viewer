@@ -13,8 +13,6 @@
 // TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 // THIS SOFTWARE
 
-
-
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -6637,6 +6635,29 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	  return html``;
 	}
 	);
+	  main.variable(observer("viewof example_index")).define("viewof example_index", ["no_edge_selected","comparison_vector_row_lookup","cv_chart_selection","splink_vis_utils"], function(no_edge_selected,comparison_vector_row_lookup,cv_chart_selection,splink_vis_utils)
+	{
+	  if (!no_edge_selected) {
+	    let num_options =
+	      comparison_vector_row_lookup[cv_chart_selection["gam_concat"]].length;
+
+	    let select_options = [...Array(num_options).keys()];
+	    return splink_vis_utils.select(select_options, {
+	      label: "Choose example record",
+	      value: 0
+	    });
+	  } else {
+	    let hidden = splink_vis_utils.select([1], {
+	      label: "Choose example record",
+	      value: 0
+	    });
+
+	    hidden.style.visibility = "hidden";
+	    return hidden;
+	  }
+	}
+	);
+	  main.variable(observer("example_index")).define("example_index", ["Generators", "viewof example_index"], (G, _) => G.input(_));
 	  main.variable(observer("compairson_non_null_table")).define("compairson_non_null_table", ["no_edge_selected","html","show_edge_comparison_type","splink_vis_utils","selected_edge","ss"], function(no_edge_selected,html,show_edge_comparison_type,splink_vis_utils,selected_edge,ss)
 	{
 	  if (no_edge_selected) {
@@ -6728,10 +6749,12 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  "gam_concat_signal"
 	)
 	)});
-	  main.variable(observer("selected_edge")).define("selected_edge", ["cv_chart_selection","comparison_vector_row_lookup"], function(cv_chart_selection,comparison_vector_row_lookup)
+	  main.variable(observer("selected_edge")).define("selected_edge", ["no_edge_selected","comparison_vector_row_lookup","cv_chart_selection","example_index"], function(no_edge_selected,comparison_vector_row_lookup,cv_chart_selection,example_index)
 	{
-	  if ("gam_concat" in cv_chart_selection) {
-	    return comparison_vector_row_lookup[cv_chart_selection["gam_concat"][0]];
+	  if (!no_edge_selected) {
+	    return comparison_vector_row_lookup[cv_chart_selection["gam_concat"][0]][
+	      example_index
+	    ];
 	  } else {
 	    return undefined;
 	  }
@@ -6759,6 +6782,9 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  let gam_keys = Object.keys(gamma_filters);
 
 	  let cvd_filtered = comparison_vector_data;
+
+	  cvd_filtered = cvd_filtered.filter(d => d.row_example_index == 1);
+
 	  gam_keys.forEach(gk => {
 	    cvd_filtered = cvd_filtered.filter(d => {
 	      let this_filter = gamma_filters[gk];
@@ -6770,7 +6796,8 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	    });
 	  });
 
-	  cvd_filtered = cvd_filtered.filter(d => d.count > filter_count);
+	  cvd_filtered = cvd_filtered.filter(d => d.count >= filter_count);
+
 	  return cvd_filtered;
 	}
 	);
@@ -6782,7 +6809,9 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  let lookup = {};
 	  sample_edges.forEach(d => {
 	    let gc = d["gam_concat"];
-	    lookup[gc] = d;
+	    lookup[gc] = lookup[gc] || [];
+
+	    lookup[gc].push(d);
 	  });
 	  return lookup;
 	}
