@@ -4,7 +4,7 @@ Not very well documented yet!
 
 But to use you do:
 
-```
+```python
 
 from splink import Splink
 linker = Splink(settings_obj.settings_dict, df, spark)
