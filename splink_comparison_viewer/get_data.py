@@ -1,8 +1,51 @@
 from splink.diagnostics import comparison_vector_distribution
 from pyspark.sql.functions import expr
+from splink.settings import Settings
 
 
-def get_edges_data(df_e, num_rows_per_comparison_vector=1, salt_num_rows=20):
+def _check_input_data(df_e, settings_dict):
+
+    columns = set(df_e.columns)
+
+    settings_obj = Settings(settings_dict)
+
+    cols_used = set()
+    for cc in settings_obj.comparison_columns_list:
+        cols_used = cols_used.union(cc.columns_used)
+
+    cols_expected = set()
+    [cols_expected.add(f"{c}_l") for c in cols_used]
+    [cols_expected.add(f"{c}_r") for c in cols_used]
+
+    missing_cols = cols_expected - columns
+
+    if len(missing_cols) > 0:
+        raise ValueError(
+            f"The following columns are missing from df_e: \n"
+            f"{missing_cols} \n"
+            "When you run Splink, you need to set 'retain_matching_columns':True in "
+            "your settings dictionary"
+        )
+
+
+def get_vis_data(
+    df_e, splink_settings_dict, num_rows_per_comparison_vector=1, salt_num_rows=20
+):
+    """From df_e (the output of linker.get_scored_comparisons), generate a pandas dataframe
+    of values to pass into the visualisation.
+
+    Args:
+        df_e ([type]): The output of Splink().get_scored_comparisons()
+        splink_settings_dict ([type]): Splink settings dictionary. Must be completed
+            which can be done using splink.settings.complete_settings_dict()
+        num_rows_per_comparison_vector (int, optional): How many examples per comparison vector. Defaults to 1.
+        salt_num_rows (int, optional): Parameter to improve efficiency of Spark execution.  See code comments.
+            Defaults to 20.
+
+    Returns:
+        pd.DataFrame: A dataframe of values to pass into the visualisation.
+    """
+    _check_input_data(df_e, splink_settings_dict)
 
     salt_num_rows = max(salt_num_rows, num_rows_per_comparison_vector)
 
