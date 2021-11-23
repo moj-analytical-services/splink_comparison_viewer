@@ -2,7 +2,6 @@ from jinja2 import Template
 import json
 import os
 import pkgutil
-import pandas as pd
 
 
 def render_html_vis(
@@ -11,7 +10,17 @@ def render_html_vis(
     out_path: str,
     overwrite: bool = False,
 ):
-    """Render the visualisation to a self-contained html page"""
+    """Generate a self-contained HTML visualisation of the comparison vector data.
+
+    The page bundles all javascript so works offline
+
+    Args:
+        comparison_vector_data (pandas dataframe): The output of the get_vis_data() function
+        splink_settings (dict): Splink settings dictionary.  Must be completed
+            which can be done using splink.settings.complete_settings_dict()
+        out_path (str): Path to write the html file out to
+        overwrite (bool, optional): If file exists, overwrite?. Defaults to False.
+    """
 
     # When developing the package, it can be easier to point
     # ar the script live on observable using <script src=>
