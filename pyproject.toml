@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "splink_comparison_viewer"
-version = "0.1.2"
+version = "0.1.3"
 description = "Create an interactive webpage to visualise Splink record comparisons"
 authors = ["Robin Linacre <robinlinacre@hotmail.com>"]
 
