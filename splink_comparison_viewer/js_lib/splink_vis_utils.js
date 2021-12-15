@@ -1,18 +1,3 @@
-// Observable runtime, inputs, stdlib and inspector are Copyright 2018-2021 Observable, Inc.
-// The licence for these libraries is as follows:
-
-// Permission to use, copy, modify, and/or distribute this software for any purpose
-// with or without fee is hereby granted, provided that the above copyright notice
-// and this permission notice appear in all copies.
-
-// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-// REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
-// FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-// INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
-// OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
-// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
-// THIS SOFTWARE
-
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -6928,7 +6913,7 @@ ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  term_freqs
 	) {
 	  let keys = Object.keys(row);
-	  keys = keys.filter((key) => key.includes("gamma_"));
+	  keys = keys.filter((key) => key.startsWith("gamma_"));
 	  return keys.map((gamma_key) =>
 	    get_waterfall_row_single_column(gamma_key, row, splink_settings, term_freqs)
 	  );
