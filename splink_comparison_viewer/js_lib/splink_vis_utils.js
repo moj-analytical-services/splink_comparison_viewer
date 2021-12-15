@@ -1,3 +1,18 @@
+// Observable runtime, inputs, stdlib and inspector are Copyright 2018-2021 Observable, Inc.
+// The licence for these libraries is as follows:
+
+// Permission to use, copy, modify, and/or distribute this software for any purpose
+// with or without fee is hereby granted, provided that the above copyright notice
+// and this permission notice appear in all copies.
+
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+// REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+// FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+// INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+// OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+// THIS SOFTWARE
+
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -6201,7 +6216,7 @@
 	  main.variable(observer("viewof show_full_tables")).define("viewof show_full_tables", ["raw_clusters_data","splink_vis_utils"], function(raw_clusters_data,splink_vis_utils)
 	{
 	  let options;
-	  
+
 	  if (raw_clusters_data == null) {
 	    options = new Map([
 	      ["Show table of all edges", "edges"],
@@ -6252,7 +6267,7 @@
 
 	  if (show_edge_comparison_type.includes("raw_edge_data")) {
 	    return html`
-  <h3>Rows compared by selected edge</h3>   
+  <h3>Rows compared by selected edge</h3>
     ${splink_vis_utils.edge_row_to_table(selected_edge, ss)}
 
 `;
@@ -6285,7 +6300,7 @@
 	  }
 	  if (show_edge_comparison_type.includes("node_history")) {
 	    return html`
-<h3>History of clicked nodes</h3> 
+<h3>History of clicked nodes</h3>
 ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 `;
 	  }
@@ -6348,7 +6363,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    return html`
     <h3>Edges corresponding to selected cluster, filtered by threshold</h3>
     Click column headers to sort
-    
+
     ${splink_vis_utils.table(filtered_edges, { layout: "auto" })}
 
   `;
@@ -6367,7 +6382,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    return html`
     <h3>All nodes corresponding to selected cluster</h3>
     Click column headers to sort
-    
+
     ${splink_vis_utils.table(filtered_nodes, { layout: "auto" })}
 
   `;
@@ -6382,7 +6397,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    return html`
     <h3>All clusters</h3>
     Click column headers to sort
-    
+
     ${splink_vis_utils.table(raw_clusters_data, { layout: "auto" })}
 
   `;
@@ -6649,7 +6664,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    return html``;
 	  }
 	  if (show_edge_comparison_type.includes("show_simple_comparison_table")) {
-	    return html`  <h3>Comparison of non-null fields</h3>   
+	    return html`  <h3>Comparison of non-null fields</h3>
     ${splink_vis_utils.edge_row_to_table(selected_edge, ss)}
 `;
 	  }
@@ -6666,7 +6681,7 @@ ${splink_vis_utils.node_rows_to_table(node_history, ss)}
 	    show_edge_comparison_type.includes("show_case_statement_comparison_table")
 	  ) {
 	    return html`
-  <h3>Record comparison and associated case expression</h3>   
+  <h3>Record comparison and associated case expression</h3>
 ${splink_vis_utils.comparison_column_table(selected_edge, ss)}`;
 	  }
 
