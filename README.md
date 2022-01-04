@@ -1,8 +1,13 @@
 # splink_comparison_viewer
 
-Not very well documented yet!
 
-But to use you do:
+## Understanding the tool
+
+There's a tutorial video available [here](https://www.youtube.com/watch?v=DNvCMqjipis).
+
+## Usage
+
+To generate a dashboard:
 
 ```python
 
